@@ -1,0 +1,269 @@
+LIBNAME meow "/home/u64391751/sasuser.v94/epi 207";
+
+OPTIONS FMTSEARCH=(meow);
+OPTIONS MERGENOBY=warn NODATE NONUMBER FORMCHAR="|----|+|---+=|-/\<>*";
+OPTIONS FORMDLIM='_';
+
+PROC CONTENTS DATA=meow.teen15 POSITION;
+RUN;
+
+PROC CONTENTS DATA=meow.teen14 POSITION;
+RUN;
+
+PROC FORMAT;
+VALUE  YESNO
+       1                      = "YES"
+       2                      = "NO";
+VALUE  OMBSRTNP1X
+       1                      = "HISPANIC"
+       2                      = "WHITE, NON-HISPANIC (NH)"
+       3                      = "OTHER RACE"
+       5                      = "ASIAN ONLY, NH"
+       7                      = "TWO OR MORE RACES, NH";
+VALUE  SRSEX
+       1                      = "MALE"
+       2                      = "FEMALE";
+VALUE  POVLLF
+       1                      = "0-99% FPL"
+       2                      = "100-199% FPL"
+       3                      = "200-299% FPL"
+       4                      = "300% FPL AND ABOVE";
+VALUE  AHEDUCPF
+       -9                     = "NOT ASCERTAINED"
+       1                      = "NO FORMAL EDUCATION OR GRADE 1-8"
+       2                      = "GRADE 9-11"
+       3                      = "GRADE 12/H.S. DIPLOMA"
+       4                      = "SOME COLLEGE"
+       5                      = "AA/AS DEGREE OR VOCATIONAL SCHOOL"
+       7                      = "BA OR BS DEGREE/SOME GRAD SCHOOL"
+       9                      = "MA OR MS DEGREE"
+       10                     = "PH.D. OR EQUIVALENT";
+VALUE  TE8X
+       -9                     = "NOT ASCERTAINED"
+       -8                     = "DON'T KNOW"
+       -7                     = "REFUSED"
+       -1                     = "INAPPLICABLE"
+        0                     = "0 DAYS"
+1                     = "1 DAYS"
+2                     = "2 DAYS"
+3                     = "3 DAYS"
+4                     = "4 DAYS"
+5                     = "5 DAYS"
+6                     = "6 DAYS"
+7                     = "7 DAYS";
+VALUE  INS64F
+       -1                     = "SKIPPED - AGE >= 65"
+       1                      = "UNINSURED"
+       2                      = "MEDI-CAL (MEDICAID)"
+       3                      = "CHIP"
+       4                      = "MEDICARE"
+       5                      = "EMPLOYMENT-BASED"
+       6                      = "PRIVATELY PURCHASED"
+       7                      = "OTHER PUBLIC";
+/* Recoding of education variable to match paper */
+VALUE EDU
+       1                      = "NO FORMAL EDUCATION OR GRADE 1-8"
+       2                      = "GRADE 12/H.S. DIPLOMA"
+       3                      = "COLLEGE AND ABOVE";
+/* Recoding of physical activity variable to match paper */
+VALUE ACT
+       1                      = "Regular physical activity 7 days a week"
+       2                      = "Regular physical activity not happening 7 days a week";
+/* Ethnic groups used in Table 2 */
+VALUE ETH
+       1                      = "HISPANIC"
+       2                      = "NON-HISPANIC WHITE"
+       3                      = "ASIAN/OTHER RACE";
+/* Insurance collapsed to 3 groups (used in ethnicity-stratified Model 3) */
+VALUE INS
+       1                      = "UNINSURED"
+       2                      = "PUBLIC"
+       3                      = "PRIVATE";
+RUN;
+
+DATA meow.both;
+    SET meow.teen14 (in=a)
+        meow.teen15 (in=b);
+    IF a THEN year = 2014;
+    ELSE IF b THEN year = 2015;
+    if TE49 = 7 then act = 1;
+    else if TE49  in (0,1,2,3,4,5,6) then act = 2;
+    if AHEDTC_P1 = 1 then edu = 1;
+    else if AHEDTC_P1 in (2, 3) then edu = 2;
+    else if AHEDTC_P1 in (4, 5, 7, 9, 10) then edu = 3;
+    /* 3 ethnic groups to match Table 2 */
+    if OMBSRTN_P1 = 1 then eth = 1;
+    else if OMBSRTN_P1 = 2 then eth = 2;
+    else if OMBSRTN_P1 in (3, 5, 7) then eth = 3;
+    /* Insurance: uninsured / public / private */
+    if INS64 = 1 then ins = 1;
+    else if INS64 in (2, 3, 4, 7) then ins = 2;
+    else if INS64 in (5, 6) then ins = 3;
+    /* 2-group versions for ethnicity-stratified Model 3 (sparse cells) */
+    edu2 = (AHEDTC_P1 in (4, 5, 7, 9, 10));   /* 1 = college and above, 0 = high school or less */
+    ins2 = (INS64 in (5, 6));                 /* 1 = private, 0 = uninsured or public           */
+    ***Create new weight variables;
+    fnwgt0 = rakedw0/2;
+    ARRAY a_origwgts[80] rakedw1-rakedw80;
+    ARRAY a_newwgts[160] fnwgt1-fnwgt160;
+    DO i = 1 to 80;
+        IF year=2014 THEN DO;
+            a_newwgts[i] = a_origwgts[i]/2;
+            a_newwgts[i+80] = rakedw0/2;
+        END;
+        ELSE IF year=2015 THEN DO;
+            a_newwgts[i]    = rakedw0/2;
+            a_newwgts[i+80] = a_origwgts[i]/2;
+        END;
+    END;
+    DROP i;
+
+LABEL
+OMBSRTN_P1    =  "OMB/CURRENT DOF RACE - ETHNICITY (PUF 1 YR RECODE)"
+TE66          =  "EVER SMOKED ELECTRONIC CIGARETTES"
+TE22          =  "EVER HAD MORE THAN FEW SIPS OF ALCOHOLIC DRINK"
+SRSEX         =  "SELF-REPORTED GENDER"
+SRAGE_P       =  "AGE (PUF RECODE)"
+POVLL         =  "POVERTY LEVEL"
+FV5DAY        =  "5+ FRUIT/VEGS. A DAY"
+BMI_P         =  "BODY MASS INDEX (PUF RECODE)"
+TC38          =  "EVER SMOKED CIGARETTES"
+TE49          =  "# OF DAYS TYPICAL WEEK TEEN PHYSICALLY ACTIVE 60 MIN OR MORE"
+AHEDTC_P1     =  "ADULT EDUCATIONAL ATTAINMENT (PUF 1 YR RECODE)"
+INS64         =  "TYPE OF CURRENT HEALTH COVERAGE SOURCE - UNDER 65"
+eth           =  "ETHNIC GROUP (3 CATEGORIES)"
+ins           =  "INSURANCE TYPE (3 CATEGORIES)";
+
+FORMAT
+OMBSRTN_P1 OMBSRTNP1X. TE66 TE22 FV5DAY TC38 YESNO. SRSEX SRSEX. POVLL POVLLF.
+TE49 TE8X. AHEDTC_P1 AHEDUCPF. INS64 INS64F. edu EDU. act ACT. eth ETH. ins INS.;
+
+RUN;
+
+/* Table 1 creation */
+PROC MEANS DATA=meow.both N MEDIAN Q1 Q3;
+VAR SRAGE_P;
+RUN;
+
+PROC SURVEYFREQ DATA=meow.both VARMETHOD=jackknife;
+    WEIGHT fnwgt0;
+    REPWEIGHT fnwgt1-fnwgt160/JKCOEFS=0.9999;
+    TABLE TE66 TE22 SRSEX POVLL FV5DAY TC38 TE49 AHEDTC_P1 INS64 SRAGE_P OMBSRTN_P1;
+RUN;
+
+proc surveyfreq data=meow.both varmethod=jackknife;
+    WEIGHT fnwgt0;
+    REPWEIGHT fnwgt1-fnwgt160/JKCOEFS=0.9999;
+    table (TE66) * (edu SRSEX OMBSRTN_P1 TE22 POVLL FV5DAY TC38 TE49 AHEDTC_P1 INS64 act) / row;
+run;
+
+proc surveymeans data=meow.both varmethod=jackknife mean stderr;
+    WEIGHT fnwgt0;
+    REPWEIGHT fnwgt1-fnwgt160/JKCOEFS=0.9999;
+    domain TE66;
+    var SRAGE_P BMI_P;
+run;
+
+
+/* Table 2 creation
+   - Outcome: alcohol use (TE22 = 1); exposure: e-cigarette use (TE66, ref = 2 = no)
+   - Subgroups use DOMAIN (not WHERE) so jackknife SEs use the full sample
+   - The stratifying variable is left out of its own subgroup models
+   - Report only the TE66 odds ratio from each model
+   - FORMAT statements remove formats so REF= uses the raw codes        */
+
+/*Model 1 Overall*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    class TE66 (ref='2') / param=ref;
+    model TE22(event='1') = TE66;
+    format TE66 TE22;
+run;
+
+/*Model 1 Boys and Girls*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain SRSEX;
+    class TE66 (ref='2') / param=ref;
+    model TE22(event='1') = TE66;
+    format TE66 TE22;
+run;
+
+/*Model 1 Hispanics, Non-Hispanic Whites, Asian/Other Race*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain eth;
+    class TE66 (ref='2') / param=ref;
+    model TE22(event='1') = TE66;
+    format TE66 TE22;
+run;
+
+
+/*Model 2 Overall: age, sex, ethnicity*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    class TE66 (ref='2') SRSEX (ref='1') eth (ref='2') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P SRSEX eth;
+    format TE66 TE22 SRSEX eth;
+run;
+
+/*Model 2 Boys and Girls: age, ethnicity*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain SRSEX;
+    class TE66 (ref='2') eth (ref='2') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P eth;
+    format TE66 TE22 eth;
+run;
+
+/*Model 2 Ethnic groups: age, sex*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain eth;
+    class TE66 (ref='2') SRSEX (ref='1') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P SRSEX;
+    format TE66 TE22 SRSEX;
+run;
+
+
+/*Model 3 Overall: Model 2 + BMI, ever smoking, poverty, parental education, insurance*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    class TE66 (ref='2') SRSEX (ref='1') eth (ref='2') TC38 (ref='2')
+          POVLL (ref='4') edu (ref='1') INS64 (ref='1') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P SRSEX eth BMI_P TC38 POVLL edu INS64;
+    format TE66 TE22 SRSEX eth TC38 POVLL edu INS64;
+run;
+
+/*Model 3 Boys and Girls (sex removed)*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain SRSEX;
+    class TE66 (ref='2') eth (ref='2') TC38 (ref='2')
+          POVLL (ref='4') edu (ref='1') INS64 (ref='1') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P eth BMI_P TC38 POVLL edu INS64;
+    format TE66 TE22 eth TC38 POVLL edu INS64;
+run;
+
+/*Model 3 Ethnic groups (ethnicity removed).
+  Parental education and insurance collapsed to 2 groups: among non-Hispanic
+  whites only 3 teens had the lowest education level and 4 were uninsured,
+  too few for the model to fit.*/
+proc surveylogistic data=meow.both varmethod=jackknife;
+    weight FNWGT0;
+    repweights FNWGT1-FNWGT160 / jkcoefs=0.9999;
+    domain eth;
+    class TE66 (ref='2') SRSEX (ref='1') TC38 (ref='2')
+          POVLL (ref='4') edu2 (ref='0') ins2 (ref='0') / param=ref;
+    model TE22(event='1') = TE66 SRAGE_P SRSEX BMI_P TC38 POVLL edu2 ins2;
+    format TE66 TE22 SRSEX TC38 POVLL;
+run;
+
